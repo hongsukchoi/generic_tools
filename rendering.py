@@ -1,5 +1,6 @@
 import numpy as np
 
+# generate the 360 rotating rendering view for the target object, when there is only one camera. If there is no world coordinate, you can pass identity matrix for world2cam
 def generate_rotating_rendering_path(world2cam, object_center, num_render_views=60):
     """
     world2cam: (4,4) numpy matrix, transformation matrix that transforms a 3D point in the world coordinate to the camera coordinate
