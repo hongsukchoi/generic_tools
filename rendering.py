@@ -1,20 +1,23 @@
 import numpy as np
+from typing import List
+from coordinate import fit_circle_in_3d, _disambiguate_normal
 
-# generate the 360 rotating rendering view for the target object, when there is only one camera. If there is no world coordinate, you can pass identity matrix for world2cam
-def generate_rotating_rendering_path(world2cam, object_center, num_render_views=60):
+# Generate the 360 rotating rendering view for the target object, when there is only one camera. If there is no world coordinate, you can pass identity matrix for world2cam
+def generate_rotating_rendering_path(world2cam: np.ndarray, object_center: np.ndarray, num_render_views: int=60) -> List[np.ndarray]:
     """
     world2cam: (4,4) numpy matrix, transformation matrix that transforms a 3D point in the world coordinate to the camera coordinate
-    object_center: 3D location of object center in the camera coordinate 
-    num_render_views: number of breakdown for 360 degree
+    object_center: (3,) numpy vector, 3D location of object center in the camera coordinate 
+    num_render_views: scalar, number of breakdown for 360 degree
     
+    // Return // 
+    rotating_world2cam_list: list of (4,4) transformation matrices that transform a 3D point in the world coordinate to a (rotating) camera coordinate
     """
 
     lower_row = np.array([[0., 0., 0., 1.]])
 
     object_center_to_camera_origin = -object_center
 
-    # output; list of transformation matrices that transform a 3D point in the world coordinate to a (rotating) camera coordinate
-    render_w2c = []
+    rotating_world2cam_list = []
     for theta in np.linspace(0., 2 * np.pi, num_render_views + 1)[:-1]:
         # transformation from original camera to a new camera 
         # theta = - np.pi / 6  # 30 degree
@@ -34,8 +37,12 @@ def generate_rotating_rendering_path(world2cam, object_center, num_render_views=
         # get the x-axis of the new camera
         x_axis = np.cross(y_axis, z_axis)
         x_axis = x_axis / np.linalg.norm(x_axis)
+        # get z_axis again to make a valid rotation matrix
+        # convert to correct rotation matrix
+        z_axis = np.cross(x_axis, y_axis)
+        z_axis = z_axis / np.linalg.norm(z_axis)
 
-        # get the transformation of coordiante-axis from the original camera to the new camera == transformation matrix that transforms a 3D point in the new camera coordinate to the original camera coordinate
+        # get the (4,4) transformation of coordiante-axis from the original camera to the new camera == transformation matrix that transforms a 3D point in the new camera coordinate to the original camera coordinate
         # 원래 카메라에서 새로운 카메라로의 좌표축변환행렬
         R_newcam2origcam = np.stack([x_axis, y_axis, z_axis], axis=1)
         newcam2origcam = np.concatenate(
@@ -48,6 +55,8 @@ def generate_rotating_rendering_path(world2cam, object_center, num_render_views=
         # transformation matrix that transforms a 3D point in the world camera coordinate to the new camera coordinate
         world2newcam = origcam2newcam @ world2cam
 
-        render_w2c.append(world2newcam)
+        rotating_world2cam_list.append(world2newcam)
 
-    return render_w2c
+    return rotating_world2cam_list
+
+# Generate the 360 rotating view, but evenly distributed, from the unevenly rotating camera views
