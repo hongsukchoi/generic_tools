@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List
 from coordinate import fit_circle_in_3d, _disambiguate_normal
+from cameras import look_at_view_transform
 
 # Generate the 360 rotating rendering view for the target object, when there is only one camera. If there is no world coordinate, you can pass identity matrix for world2cam
 def generate_rotating_rendering_path(world2cam: np.ndarray, object_center: np.ndarray, num_render_views: int=60) -> List[np.ndarray]:
@@ -59,4 +60,41 @@ def generate_rotating_rendering_path(world2cam: np.ndarray, object_center: np.nd
 
     return rotating_world2cam_list
 
+
 # Generate the 360 rotating view, but evenly distributed, from the unevenly rotating camera views
+def generate_rendering_path_from_multiviews(camera_centers: np.ndarray, world_object_center: np.ndarray, up: np.ndarray = np.array([0., -1., 0.], dtype=np.float32), num_render_views: int= 60, trajectory_scale: float = 1.1) -> List[np.ndarray]:
+    """
+    camera_centers: (N, 3) numpy matrix, 3D locations of cameras in the world coordinate
+    world_object_center: (3,) numpy vector, 3D location of object center in the world coordinate
+    up: (3,) numpy vector, up vector of the world coordinate
+    
+    // Returns //
+    Rts: (num_rendering_view, 4, 4) numpy matrix, transformation matrix that transforms a 3D point in the world coordinate to the rotating camera coordinates
+    """
+
+    angles = np.linspace(0, 2.0 * np.pi, num_render_views).astype(np.float32)
+
+    # rendering_camera_centers: (num_rendering_views, 3), normal: (3,)
+    rendering_camera_centers, normal = fit_circle_in_3d(camera_centers, angles=angles) 
+
+    # align the normal to up vector of the world corodinate
+    up = _disambiguate_normal(normal, up)
+    
+    # scale the distance between the rotating cameras and the object center in the world coordinate
+    traj = rendering_camera_centers
+    _t_mu = traj.mean(axis=0, keepdims=True)
+    traj = (traj - _t_mu) * trajectory_scale + _t_mu
+
+    # point all cameras towards the center of the scene
+    Rs, ts = look_at_view_transform(
+        traj,
+        at=world_object_center[None, :],  # (1, 3)
+        up=up[None, :],  # (1, 3)
+    )
+
+    Rts = np.concatenate([Rs, ts[:, :, None]], axis=2)  # (num_rendering_views, 3, 4)
+    Rts = np.concatenate([Rts, np.array(
+        [[[0., 0., 0., 1.]]], dtype=np.float32).repeat(Rts.shape[0], axis=0)], axis=1)
+
+
+    return Rts
